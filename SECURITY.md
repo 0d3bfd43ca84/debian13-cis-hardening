@@ -9,5 +9,5 @@
 ## Reporting a Vulnerability
 If you discover a vulnerability in this project:
 1. Do NOT open a public issue.
-2. Email security@tu-dominio.com
+2. Email github.com.ps0ok@aethervaultid.com
 3. Response time: 48 hours.
