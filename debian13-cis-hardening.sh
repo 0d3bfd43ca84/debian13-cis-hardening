@@ -49,7 +49,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
   chrony \
   libpam-tmpdir \
   libpam-pwquality \
-  fail2ban >/dev/null
+  nftables >/dev/null
 
 ### ============================================================
 ### 2. Kernel cmdline: AppArmor + audit
