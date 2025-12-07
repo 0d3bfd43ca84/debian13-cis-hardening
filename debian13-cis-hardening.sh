@@ -11,7 +11,6 @@
 # - sysctl hardening (Lynis + extra PCI/ISO-like)
 # - nftables firewall base (IPv6 DROP, solo SSH)
 # - SSH crypto endurecido (Kex/Ciphers/MACs modernos)
-# - fail2ban básico para sshd
 # - chrony NTS endurecido
 # - default target multi-user
 # - opción de deshabilitar servicios innecesarios (cups, avahi, bluetooth, rpcbind, systemd-resolved)
@@ -50,7 +49,6 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
   chrony \
   libpam-tmpdir \
   libpam-pwquality \
-  nftables \
   fail2ban >/dev/null
 
 ### ============================================================
@@ -634,32 +632,10 @@ else
 fi
 
 ### ============================================================
-### 11. fail2ban básico para sshd
+### 11. Configuración de Chrony (NTS + hardening)
 ### ============================================================
 
-echo "[11/12] Configurando fail2ban para sshd..."
-
-mkdir -p /etc/fail2ban/jail.d
-
-cat >/etc/fail2ban/jail.d/sshd.local <<'EOF'
-[sshd]
-enabled  = true
-port     = ssh
-logpath  = /var/log/auth.log
-backend  = auto
-maxretry = 5
-findtime = 600
-bantime  = 604800  ; 1 semana
-EOF
-
-systemctl enable fail2ban >/dev/null 2>&1 || true
-systemctl restart fail2ban || true
-
-### ============================================================
-### 12. Configuración de Chrony (NTS + hardening)
-### ============================================================
-
-echo "[12/12] Configurando Chrony (NTS + hardening)..."
+echo "[11/11] Configurando Chrony (NTS + hardening)..."
 
 CHRONY_CONF="/etc/chrony/chrony.conf"
 
@@ -822,7 +798,6 @@ echo " - Permisos sshd_config, cron*, sudoers.d"
 echo " - sysctl hardening aplicado (Lynis + extra PCI/ISO-like)"
 echo " - nftables base aplicado (IPv6 DROP, solo SSH abierto)"
 echo " - SSH crypto endurecido (Kex/Ciphers/MACs modernos)"
-echo " - fail2ban configurado para sshd"
 echo " - Chrony NTS endurecido"
 echo " - Default target: multi-user.target"
 echo " - Servicios opcionales deshabilitados según respuestas"
