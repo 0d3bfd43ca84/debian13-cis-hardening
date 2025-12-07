@@ -1,67 +1,66 @@
 Debian 13 CIS Hardening – Production Grade (2025) 🔒🐧
 
-Script de hardening para servidores Debian 13 diseñado para ofrecer una base segura, estable y auditable.
-Su objetivo es acercar el sistema a las recomendaciones del CIS Debian Linux Benchmark v2.0.1, mejorar el Hardening Index de Lynis, y proporcionar una configuración lista para entornos serios de producción.
+Script de hardening para servidores Debian 13 diseñado para proporcionar una base segura, estable y auditable.
+Alineado con las recomendaciones del CIS Debian Linux Benchmark v2.0.1, incrementa el Hardening Index de Lynis y refuerza la superficie de ataque del sistema para entornos exigentes.
 
 ✨ Características principales
-
-Este script aplica endurecimiento sobre:
-
 🔐 Seguridad del sistema
 
 AppArmor activado y reforzado
 
 auditd + reglas CIS 4.1.x
 
-sysctl hardening (kernel/network) con medidas adicionales tipo PCI/ISO
+sysctl hardening (kernel + red) con medidas adicionales tipo PCI/ISO
 
-Restricciones de permisos en SSHD, sudoers.d, cron y ficheros sensibles
+Permisos reforzados en sshd_config, sudoers.d, cron y ficheros críticos
 
-🛡️ SSH Hardening
+🔑 SSH Hardening
 
-Protocol 2 forzado
+Protocol 2
 
-Kex modernos: sntrup761x25519, curve25519-sha256
+Kex modernos:
+sntrup761x25519-sha512@openssh.com, curve25519-sha256
 
-Ciphers seguros: chacha20-poly1305, aes256-gcm
+Ciphers seguros:
+chacha20-poly1305@openssh.com, aes256-gcm@openssh.com
 
-MACs ETM modernos
+MACs modernos (modo ETM)
 
-Compatible con OpenSSH 9.x (cliente/servidor)
+Compatible con OpenSSH 9.x
+
+Resultado esperado: SSH moderno y resistente a ataques criptográficos conocidos.
 
 🔥 Firewall nftables (baseline segura)
 
-Política por defecto DROP
+Política por defecto: DROP
 
-IPv6 totalmente bloqueado
+IPv6 completamente bloqueado
 
 Conntrack endurecido
 
-Detección y bloqueo de scans (NULL, XMAS, SYN-FIN, SYN-RST)
+Detección de scans (NULL, XMAS, SYN-FIN, SYN-RST)
 
 Rate-limit en SSH → seguro pero compatible con Ansible
 
-🔑 Política de contraseñas y cuentas
-
-pwquality (minlen 12, difok 3)
-
-Password aging: 180 días, aviso 30 días
-
-umask 027 para todos los usuarios
-
-pam_unix con hashing sha512 + rounds si procede
-
+🧰 Política de contraseñas y cuentas
+Componente	Configuración
+pwquality	minlen 12, difok 3
+Password aging	180 días, aviso 30
+umask	027 global
+pam_unix	sha512 + rounds cuando aplica
 🕒 Sincronización horaria segura
 
-Chrony configurado con NTS (Network Time Security)
+Chrony con NTS (Network Time Security)
 
 Servidores Netnod + Cloudflare
 
-Hardening del motor NTP (limitación de jitter, delay y samples)
+Parámetros estrictos de jitter, distancia y sampleo
+
+Tiempo seguro → logs fiables → auditorías felices.
 
 🚫 Servicios innecesarios (opcional)
 
-Preguntas interactivas para deshabilitar y maskear:
+Durante la ejecución se pregunta si deseas deshabilitar:
 
 cups
 
@@ -73,51 +72,40 @@ rpcbind
 
 systemd-resolved
 
-👊 Protección adicional
+Ideal para entornos minimalistas o de alta exposición.
 
-BPF JIT hardened
+🎯 Objetivos del script
 
-Protección ARP (announce/ignore)
+Alinear el sistema con CIS Debian Benchmark v2.0.1 (orientado a Level 2)
 
-ASLR forzado
+Elevar el Hardening Index de Lynis (generalmente >80–90)
 
-dmesg restringido
+Reducir la superficie de ataque en servidores VPS / bare-metal
 
-mmap_min_addr endurecido
+Crear una base técnica compatible con marcos como PCI-DSS o ISO 27001
+(nota: no sustituye una auditoría oficial)
 
-Core dumps de SUID deshabilitados
+⚠️ Advertencias importantes
 
-🎯 Objetivos
+Este script está pensado para servidores dedicados.
 
-Alinear el sistema con prácticas del CIS Debian Benchmark v2.0.1 (orientado a Level 2)
+Puede romper:
 
-Aumentar el Hardening Index de Lynis típicamente por encima de 80–90, según rol del servidor
+contenedores Docker/Podman
 
-Reducir superficie de ataque en servidores bare-metal y VPS
+snaps
 
-Proveer una base técnica compatible con entornos auditables (PCI-DSS / ISO 27001)
-(Nota: este script no sustituye una auditoría formal ni otros controles organizativos.)
+escritorios gráficos
 
-⚠️ Advertencia importante
-
-Este script está diseñado para servidores dedicados.
-Podría romper:
-
-contenedores (Docker/Podman)
-
-sistemas con snaps
-
-escritorios GNOME/KDE
-
-hosts que dependan de overlay/squashfs/usb-storage
+máquinas que dependan de overlay/squashfs/usb-storage
 
 Ejecutar solo si:
 
-Tienes acceso físico o consola de rescate
+Tienes consola de rescate o acceso físico
 
-Has leído y entendido el código completo
+Has leído el script completo
 
-Aceptas que deshabilita módulos críticos y bloquea IPv6
+Aceptas que desactiva IPv6 y bloquea módulos críticos
 
 🚀 Instalación y uso
 git clone https://github.com/tuusuario/debian-cis-hardening-2025.git
