@@ -41,7 +41,7 @@ timestamp="$(date +%Y%m%d-%H%M%S)"
 ### 1. Paquetería requerida
 ### ============================================================
 
-echo "[1/11] Instalando paquetes necesarios (AppArmor, auditd, chrony, nftables, libpam-tmpdir, libpam-pwquality, fail2ban)..."
+echo "[1/12] Instalando paquetes necesarios (AppArmor, auditd, chrony, nftables, libpam-tmpdir, libpam-pwquality)..."
 DEBIAN_FRONTEND=noninteractive apt-get update -y >/dev/null
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
   apparmor apparmor-utils \
@@ -55,7 +55,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
 ### 2. Kernel cmdline: AppArmor + audit
 ### ============================================================
 
-echo "[2/11] Configurando parámetros de kernel en /etc/default/grub..."
+echo "[2/12] Configurando parámetros de kernel en /etc/default/grub..."
 
 GRUB_DEFAULT_FILE="/etc/default/grub"
 if [[ ! -f "$GRUB_DEFAULT_FILE" ]]; then
@@ -107,7 +107,7 @@ fi
 ### 3. Módulos de kernel: cis-kernel-hardening.conf
 ### ============================================================
 
-echo "[3/11] Creando /etc/modprobe.d/cis-kernel-hardening.conf..."
+echo "[3/12] Creando /etc/modprobe.d/cis-kernel-hardening.conf..."
 
 cat >/etc/modprobe.d/cis-kernel-hardening.conf <<'EOF'
 ########################################################################
@@ -186,7 +186,7 @@ update-initramfs -u >/dev/null
 ### 4. sudo: log dedicado (CIS 5.2.3)
 ### ============================================================
 
-echo "[4/11] Configurando log dedicado de sudo..."
+echo "[4/12] Configurando log dedicado de sudo..."
 
 SUDO_CIS_FILE="/etc/sudoers.d/01-cis-sudo-log"
 
@@ -213,7 +213,7 @@ chmod 600 /var/log/sudo.log
 ### 4b. Política de contraseñas (pwquality, aging, umask, rounds)
 ### ============================================================
 
-echo "[4b/11] Reforzando política de contraseñas (pwquality + aging + umask + hashing rounds)..."
+echo "[4b/12] Reforzando política de contraseñas (pwquality + aging + umask + hashing rounds)..."
 
 COMMON_PASSWORD="/etc/pam.d/common-password"
 LOGIN_DEFS="/etc/login.defs"
@@ -262,7 +262,7 @@ chmod 644 /etc/profile.d/01-umask.sh
 ### 5. auditd.conf — parámetros principales
 ### ============================================================
 
-echo "[5/11] Ajustando /etc/audit/auditd.conf..."
+echo "[5/12] Ajustando /etc/audit/auditd.conf..."
 
 AUDIT_CONF="/etc/audit/auditd.conf"
 
@@ -408,7 +408,7 @@ chmod 640 "$RULES_DIR"/*.rules
 ### 7. Permisos de ficheros críticos (sshd, cron, sudoers.d)
 ### ============================================================
 
-echo "[7/11] Ajustando permisos de sshd_config, cron y sudoers.d..."
+echo "[7/12] Ajustando permisos de sshd_config, cron y sudoers.d..."
 
 # /etc/ssh/sshd_config
 if [[ -f /etc/ssh/sshd_config ]]; then
@@ -440,7 +440,7 @@ fi
 ### 8. sysctl hardening (Lynis / CIS + extra)
 ### ============================================================
 
-echo "[8/11] Configurando sysctl hardening (Lynis + CIS + extra)..."
+echo "[8/12] Configurando sysctl hardening (Lynis + CIS + extra)..."
 
 cat >/etc/sysctl.d/99-hardening.conf <<'EOF'
 ###########################################
@@ -528,7 +528,7 @@ sysctl --system >/dev/null
 ### 9. nftables: firewall base + conntrack + IPv6 DROP
 ### ============================================================
 
-echo "[9/11] Configurando nftables (firewall base + conntrack + IPv6 DROP)..."
+echo "[9/12] Configurando nftables (firewall base + conntrack + IPv6 DROP)..."
 
 cat >/etc/nftables.conf <<'EOF'
 flush ruleset
@@ -607,7 +607,7 @@ nft list ruleset || true
 ### 10. SSH hardening (Kex/Ciphers/MACs modernos)
 ### ============================================================
 
-echo "[10/11] Endureciendo configuración de SSH (crypto moderna)..."
+echo "[10/12] Endureciendo configuración de SSH (crypto moderna)..."
 
 SSHD_CONF="/etc/ssh/sshd_config"
 if [[ -f "$SSHD_CONF" ]]; then
@@ -635,7 +635,7 @@ fi
 ### 11. Configuración de Chrony (NTS + hardening)
 ### ============================================================
 
-echo "[11/11] Configurando Chrony (NTS + hardening)..."
+echo "[11/12] Configurando Chrony (NTS + hardening)..."
 
 CHRONY_CONF="/etc/chrony/chrony.conf"
 
