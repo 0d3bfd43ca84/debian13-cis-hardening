@@ -1,4 +1,4 @@
-# Debian 13 CIS Hardening – Production Grade (2025) 🔒🐧
+# Debian 13 Hardening – Production Grade (2025) 🔒🐧
 
 Script de hardening para **servidores Debian 13** diseñado para proporcionar una **base segura, estable y auditable**.  
 Alineado con las recomendaciones del **CIS Debian Linux Benchmark v2.0.1**, incrementa el **Hardening Index de Lynis** y refuerza la superficie de ataque del sistema para entornos exigentes.
