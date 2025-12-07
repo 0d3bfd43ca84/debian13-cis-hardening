@@ -108,3 +108,16 @@ git clone https://github.com/tuusuario/debian-cis-hardening-2025.git
 cd debian-cis-hardening-2025
 chmod +x cis_hardening_base.sh
 sudo ./cis_hardening_base.sh
+```
+---
+## 📘 Referencias
+
+CIS Benchmark for Debian Linux 12 v1.1.0
+
+Debian Administrator’s Handbook
+
+AppArmor Documentation
+
+OpenSSH Security Guidelines
+
+NTS draft-ietf-ntp-using-nts-for-ntp
