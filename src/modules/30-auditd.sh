@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
 
 step_30_auditd() {
-  log_step "[5/12] Ajustando /etc/audit/auditd.conf..."
+  log_step "[30] Configurando auditd (auditd.conf + reglas CIS 4.1.x)..."
 
-  AUDIT_CONF="/etc/audit/auditd.conf"
+  local AUDIT_CONF="/etc/audit/auditd.conf"
+  local RULES_DIR="/etc/audit/rules.d"
+  local UID_MIN
 
+  # ----------------------------------------------------------
+  # 1) auditd.conf – parámetros principales
+  # ----------------------------------------------------------
   if [[ -f "$AUDIT_CONF" ]]; then
+    cp "$AUDIT_CONF" "${AUDIT_CONF}.bak.${timestamp}"
+    echo "  -> Backup de ${AUDIT_CONF} en ${AUDIT_CONF}.bak.${timestamp}"
+
     sed -i -E 's/^\s*max_log_file\s*=.*/max_log_file = 16/' "$AUDIT_CONF"
     sed -i -E 's/^\s*max_log_file_action\s*=.*/max_log_file_action = keep_logs/' "$AUDIT_CONF"
     sed -i -E 's/^\s*disk_full_action\s*=.*/disk_full_action = single/' "$AUDIT_CONF"
@@ -16,12 +24,23 @@ step_30_auditd() {
     echo "WARN: No se encontró $AUDIT_CONF; auditd podría no estar configurado correctamente." >&2
   fi
 
-  log_step "[6/12] Creando reglas auditd en /etc/audit/rules.d/..."
+  # ----------------------------------------------------------
+  # 2) Reglas auditd CIS 4.1.x
+  # ----------------------------------------------------------
+  echo "  -> Creando reglas en /etc/audit/rules.d/..."
 
-  RULES_DIR="/etc/audit/rules.d"
   mkdir -p "$RULES_DIR"
+  chown root:root "$RULES_DIR"
+  chmod 750 "$RULES_DIR"
 
   UID_MIN=$(awk '/^UID_MIN/ {print $2}' /etc/login.defs 2>/dev/null || echo 1000)
+
+  # Backup de reglas previas con prefijo 50-* y 99-finalize
+  for f in "$RULES_DIR"/50-*.rules "$RULES_DIR"/99-finalize.rules; do
+    if [[ -f "$f" ]]; then
+      cp "$f" "${f}.bak.${timestamp}"
+    fi
+  done
 
   cat >"$RULES_DIR/50-scope.rules" <<'EOF'
 -w /etc/sudoers -p wa -k scope
@@ -121,4 +140,14 @@ EOF
 EOF
 
   chmod 640 "$RULES_DIR"/*.rules
+
+  # ----------------------------------------------------------
+  # 3) Validar reglas
+  # ----------------------------------------------------------
+  if command -v augenrules >/dev/null 2>&1; then
+    echo "  -> Probando reglas con augenrules --test..."
+    if ! augenrules --test >/dev/null 2>&1; then
+      echo "WARN: augenrules --test devolvió error; revisa reglas en ${RULES_DIR} antes de reiniciar." >&2
+    fi
+  fi
 }
