@@ -1,34 +1,46 @@
 #!/usr/bin/env bash
 
 step_10_kernel_cmdline_and_modprobe() {
-  log_step "[2/12] Configurando parámetros de kernel en /etc/default/grub..."
+  log_step "[10] Configurando kernel cmdline y módulos"
 
-  GRUB_DEFAULT_FILE="/etc/default/grub"
+  local GRUB_DEFAULT_FILE="/etc/default/grub"
+
   if [[ ! -f "$GRUB_DEFAULT_FILE" ]]; then
     echo "No existe $GRUB_DEFAULT_FILE, abortando." >&2
     exit 1
   fi
 
+  # Backup antes de tocar GRUB
+  cp "$GRUB_DEFAULT_FILE" "${GRUB_DEFAULT_FILE}.bak.${timestamp}"
+  echo "  -> Backup de ${GRUB_DEFAULT_FILE} en ${GRUB_DEFAULT_FILE}.bak.${timestamp}"
+
   # shellcheck source=/etc/default/grub
   source "$GRUB_DEFAULT_FILE"
 
-  CURRENT_CMDLINE="${GRUB_CMDLINE_LINUX:-}"
+  local CURRENT_CMDLINE="${GRUB_CMDLINE_LINUX:-}"
+  local NEW_CMDLINE="$CURRENT_CMDLINE"
 
-  REQUIRED_PARAMS=(
+  # Parámetros mínimos necesarios para AppArmor + audit
+  local REQUIRED_PARAMS=(
     "apparmor=1"
     "security=apparmor"
     "audit=1"
     "audit_backlog_limit=8192"
   )
 
-  NEW_CMDLINE="$CURRENT_CMDLINE"
-
+  # Para cada parámetro, eliminamos cualquier valor previo y añadimos el nuevo
+  local p name
   for p in "${REQUIRED_PARAMS[@]}"; do
-    if [[ " $NEW_CMDLINE " != *" $p "* ]]; then
-      NEW_CMDLINE="${NEW_CMDLINE} ${p}"
-    fi
+    name="${p%%=*}"
+
+    # Elimina entradas previas tipo "name=algo"
+    NEW_CMDLINE="$(echo " ${NEW_CMDLINE} " | sed -E "s/ ${name}=[^ ]*//g")"
+
+    # Añade el valor deseado
+    NEW_CMDLINE="${NEW_CMDLINE} ${p}"
   done
 
+  # Limpia espacios
   NEW_CMDLINE="$(echo "$NEW_CMDLINE" | xargs || true)"
 
   if grep -qE '^GRUB_CMDLINE_LINUX=' "$GRUB_DEFAULT_FILE"; then
@@ -38,13 +50,21 @@ step_10_kernel_cmdline_and_modprobe() {
   fi
 
   echo "  -> GRUB_CMDLINE_LINUX=\"${NEW_CMDLINE}\""
-  echo "  -> Ejecutando update-grub..."
-  update-grub >/dev/null
 
+  echo "  -> Actualizando configuración de GRUB..."
+  if command -v update-grub >/dev/null 2>&1; then
+    update-grub >/dev/null
+  elif command -v grub-mkconfig >/dev/null 2>&1; then
+    grub-mkconfig -o /boot/grub/grub.cfg >/dev/null
+  else
+    echo "WARN: ni update-grub ni grub-mkconfig disponibles; revisa GRUB manualmente." >&2
+  fi
+
+  # Permisos de /boot/grub/grub.cfg según CIS
   if [[ -f /boot/grub/grub.cfg ]]; then
     echo "[2b/12] Ajustando permisos de /boot/grub/grub.cfg..."
     chown root:root /boot/grub/grub.cfg
-    chmod u=rw,go= /boot/grub/grub.cfg
+    chmod 600 /boot/grub/grub.cfg
   fi
 
   log_step "[3/12] Creando /etc/modprobe.d/cis-kernel-hardening.conf..."
@@ -119,6 +139,13 @@ blacklist sctp
 install sctp /bin/true
 EOF
 
+  chown root:root /etc/modprobe.d/cis-kernel-hardening.conf
+  chmod 600 /etc/modprobe.d/cis-kernel-hardening.conf
+
   echo "  -> Actualizando initramfs..."
-  update-initramfs -u >/dev/null
+  if command -v update-initramfs >/dev/null 2>&1; then
+    update-initramfs -u >/dev/null
+  else
+    echo "WARN: update-initramfs no disponible; revisa initramfs manualmente." >&2
+  fi
 }
