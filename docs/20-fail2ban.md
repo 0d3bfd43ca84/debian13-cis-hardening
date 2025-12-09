@@ -1,123 +1,191 @@
-# Fail2Ban + nftables — Hardening para Debian 13
+# 20 – Fail2ban Hardening (Debian 13)
 
-Integración avanzada entre Fail2Ban y nftables diseñada para entornos de alta seguridad: servidores Debian, nodos Bitcoin, infra crítica y sistemas expuestos a Internet.  
-El objetivo es implementar un **drop temprano**, eficiente y consistente con CIS Level 2.
+Configuración endurecida de **Fail2ban** para servidores Debian 13 (Trixie).  
+Este módulo complementa a nftables proporcionando defensa activa frente a ataques de fuerza bruta, bots automatizados y tráfico abusivo.
 
----
-
-## 1. Objetivos del sistema
-
-- Protección anti-bruteforce robusta para SSH
-- Integración Fail2Ban → nftables mediante sets dinámicos
-- Baja carga sobre journald y CPU
-- Compatibilidad con despliegues automatizados
-- Auditoría completa (si auditd está habilitado)
+La integración se realiza mediante **nftables** (no iptables), en cumplimiento de prácticas modernas de seguridad.
 
 ---
 
-## 2. Arquitectura
+## 1. Objetivos
 
-SSH → journald → Fail2Ban → acción nft → set blacklist → DROP temprano
-
-Fail2Ban detecta accesos fallidos y añade la IP atacante al set dinámico `blacklist`.  
-nftables descarta paquetes antes del handshake SSH.
+- Integrar Fail2ban con **nftables**, evitando iptables-legacy.  
+- Proteger servicios críticos: SSH y (opcional) autenticación del sistema.  
+- Minimizar falsos positivos manteniendo una respuesta agresiva ante bots.  
+- Asegurar auditoría adecuada mediante logging estructurado.  
+- Alinear configuraciones con CIS Debian Benchmark (sección 3.x + 5.x).
 
 ---
 
-## 3. Requisitos
+## 2. Instalación
 
 ```bash
-apt install fail2ban nftables
-systemctl enable --now nftables
+apt install fail2ban
+systemctl enable --now fail2ban
 ```
 
-## 4. Configuración nftables
+Comando de prueba:
 
-Crear /etc/nftables-f2b.conf:
-````bash table inet f2b {
-    set blacklist {
-        type ipv4_addr
-        timeout 24h
-        flags timeout
-    }
+```bash
+fail2ban-client status
+```
 
-    set blacklist6 {
-        type ipv6_addr
-        timeout 24h
-        flags timeout
-    }
+---
 
-    chain input {
-        type filter hook input priority -5;
+## 3. Configuración principal (`/etc/fail2ban/jail.local`)
 
-        ip  saddr @blacklist  drop
-        ip6 saddr @blacklist6 drop
-    }
-}
-````
+### 3.1 Backend — obligatorio en Debian 13
 
-Incluirlo desde /etc/nftables.conf:
-````bash
-include "/etc/nftables-f2b.conf"
-````
+```ini
+backend = systemd
+```
 
-Aplicar:
-````bash
-nft -f /etc/nftables.conf
-````
+**Motivo:**  
+Debian 13 utiliza journald como backend primario. Evita fallos del parser tradicional.
 
-## 5. Acción Fail2Ban personalizada
+---
 
-Crear /etc/fail2ban/action.d/nftables.conf:
-````bash
-[Definition]
-actionstart = nft add table inet f2b 2>/dev/null || true
+### 3.2 Parámetros globales recomendados
 
-actionban   = nft add element inet f2b blacklist { <ip> timeout <bantime>s }
-actionunban = nft delete element inet f2b blacklist { <ip> }
-
-[Init]
-nftables_family = inet
-nftables_table  = f2b
-nftables_set    = blacklist
-````
-
-## 6. jail.local recomendado
-
-Archivo /etc/fail2ban/jail.local:
-
-````bash
+```ini
 [DEFAULT]
-backend   = systemd
-banaction = nftables
-bantime   = 3600
-findtime  = 600
-maxretry  = 5
+bantime = 1h
+findtime = 10m
+maxretry = 3
 
+banaction = nftables-multiport
+banaction_allports = nftables-allports
+
+ignoreip = 127.0.0.1/8 ::1
+```
+
+- `bantime` agresivo pero razonable para bots.  
+- `maxretry=3` → estándar en entornos CIS.  
+- `nftables-multiport` garantiza compatibilidad con la política DROP.
+
+---
+
+## 4. Jail SSH
+
+Archivo: `/etc/fail2ban/jail.d/ssh.conf`
+
+```ini
 [sshd]
 enabled = true
-port    = ssh
-logpath = %(sshd_log)s
-````
-Validacion
-````bash
-fail2ban-client -t
-systemctl restart fail2ban
-````
+port = ssh
+filter = sshd
+logpath = journald
+maxretry = 3
+bantime = 1h
+```
 
-## 8. Hardening SSH complementario
+**Complemento nftables:** Fail2ban genera una cadena propia con los IPs bloqueados.
 
-MaxAuthTries 3
+---
 
-AllowUsers <usuario>
+## 5. Reglas nftables generadas por Fail2ban
 
-Deshabilitar autenticación por contraseña cuando sea posible
+Ejemplo típico:
 
-AppArmor para /usr/sbin/sshd
+```nft
+table ip fail2ban {
+    chain sshd {
+        type filter hook prerouting priority -100; policy accept;
+        ip saddr { 192.168.1.100 } drop
+    }
+}
+```
 
-Registros auditd activados para execve y sudo
+> *Nota:* fail2ban usa **tablas independientes**, no toca `inet filter`, lo cual mantiene aislamiento.
 
-## 9. Conclusión
+---
 
-La combinación Fail2Ban → nftables reduce el coste de mitigación de ataques SSH hasta niveles mínimos.
-Es la solución recomendada para Debian 13 en entornos críticos con exposición pública.
+## 6. Logging y auditoría
+
+### 6.1 Logging estructurado
+
+```ini
+logtarget = SYSLOG
+syslogsocket = auto
+```
+
+### 6.2 Revisar baneos activos
+
+```bash
+fail2ban-client status sshd
+```
+
+### 6.3 Ver IPs bloqueadas
+
+```bash
+nft list ruleset | grep fail2ban
+```
+
+---
+
+## 7. Medidas adicionales opcionales
+
+### 7.1 Protección de autenticación local (pam-generic)
+
+```ini
+[pam-generic]
+enabled = false  # Activar solo en servidores muy expuestos
+logpath = /var/log/auth.log
+maxretry = 5
+bantime = 1h
+```
+
+### 7.2 Protección para Nginx/Apache
+
+Se recomienda únicamente cuando el servidor exponga HTTP público:
+
+```ini
+[nginx-http-auth]
+enabled = false
+```
+
+Fail2ban no está diseñado para proteger APIs bajo carga; usar con cautela.
+
+---
+
+## 8. Validación y pruebas
+
+### 8.1 Probar expresiones del filtro
+
+```bash
+fail2ban-regex /var/log/auth.log /etc/fail2ban/filter.d/sshd.conf
+```
+
+### 8.2 Forzar un fake ban (prueba de firewall)
+
+```bash
+fail2ban-client set sshd banip 1.2.3.4
+```
+
+### 8.3 Ver el efecto en nftables
+
+```bash
+nft list ruleset | grep 1.2.3.4
+```
+
+---
+
+## 9. Mapeo rápido a CIS Benchmark
+
+| CIS Control | Implementación |
+|-------------|----------------|
+| 3.5.x       | Integración con nftables |
+| 5.3.x       | Protección de autenticación |
+| 5.4.x       | Auditoría de intentos fallidos |
+| 5.2.x       | Refuerzo SSH (complemento al módulo 40) |
+
+El mapeo completo aparecerá en `../cis/mapping-level2.md`.
+
+---
+
+## 10. Referencias
+
+- CIS Debian Benchmark v1.1.0 – sección 3 y 5  
+- Fail2ban Documentation  
+- nftables Wiki  
+- Debian Security Guide  
