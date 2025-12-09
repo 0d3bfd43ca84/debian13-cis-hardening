@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 step_00_packages() {
-  log_step "[1/12] Instalando paquetes necesarios (AppArmor, auditd, chrony, nftables, libpam-tmpdir, libpam-pwquality)..."
+  log_step "[1/12] Instalando paquetes necesarios ..."
 
   DEBIAN_FRONTEND=noninteractive apt-get update -y >/dev/null
   DEBIAN_FRONTEND=noninteractive apt-get install -y \
@@ -10,5 +10,6 @@ step_00_packages() {
     chrony \
     libpam-tmpdir \
     libpam-pwquality \
-    nftables >/dev/null
+    nftables \
+    fail2ban >/dev/null
 }
