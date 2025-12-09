@@ -1,4 +1,3 @@
-# 10 – nftables Hardening Baseline (Debian 13)
 
 Firewall baseline para servidores Debian 13 (Trixie) utilizando **nftables**.  
 Diseñada para cumplir controles del CIS Debian Benchmark (sección 3.x), minimizar superficie de ataque y ofrecer un filtrado estricto, predecible y auditable.
