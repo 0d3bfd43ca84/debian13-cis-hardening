@@ -34,7 +34,7 @@ systemctl enable --now nftables
 ## 4. Configuración nftables
 
 Crear /etc/nftables-f2b.conf:
-table inet f2b {
+````bash table inet f2b {
     set blacklist {
         type ipv4_addr
         timeout 24h
@@ -54,6 +54,7 @@ table inet f2b {
         ip6 saddr @blacklist6 drop
     }
 }
+````
 
 Incluirlo desde /etc/nftables.conf:
 ````bash
