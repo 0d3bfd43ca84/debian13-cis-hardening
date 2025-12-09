@@ -1,4 +1,3 @@
-# 20 – Fail2ban Hardening (Debian 13)
 
 Configuración endurecida de **Fail2ban** para servidores Debian 13 (Trixie).  
 Este módulo complementa a nftables proporcionando defensa activa frente a ataques de fuerza bruta, bots automatizados y tráfico abusivo.
