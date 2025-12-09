@@ -43,6 +43,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 . "${SCRIPT_DIR}/modules/60-nftables.sh"
 # shellcheck source=/dev/null
+. "${SCRIPT_DIR}/modules/65-fail2ban.sh"
+# shellcheck source=/dev/null
 . "${SCRIPT_DIR}/modules/70-ssh.sh"
 # shellcheck source=/dev/null
 . "${SCRIPT_DIR}/modules/80-chrony.sh"
@@ -64,6 +66,7 @@ main() {
   step_40_file_perms
   step_50_sysctl
   step_60_nftables
+  step_65_fail2ban
   step_70_ssh
   step_80_chrony
   step_90_services_and_finalize
