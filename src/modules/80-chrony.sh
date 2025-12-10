@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 
 step_80_chrony() {
-  log_step "[11/12] Configurando Chrony (NTS + hardening)..."
+  log_step "[80] Configurando Chrony (NTS + hardening)..."
 
-  CHRONY_CONF="/etc/chrony/chrony.conf"
+  local CHRONY_CONF="/etc/chrony/chrony.conf"
+  local CHRONY_KEYS="/etc/chrony/chrony.keys"
+  local CH_USER
+  local CH_GROUP
 
+  # Backup de configuración previa si existe
   if [[ -f "${CHRONY_CONF}" ]]; then
     echo "  -> Backup de ${CHRONY_CONF} en ${CHRONY_CONF}.bak.${timestamp}"
     cp "${CHRONY_CONF}" "${CHRONY_CONF}.bak.${timestamp}"
@@ -12,8 +16,32 @@ step_80_chrony() {
 
   mkdir -p /etc/chrony
 
-  CH_USER="$(stat -c '%U' /var/lib/chrony 2>/dev/null || echo '_chrony')"
-  CH_GROUP="$(stat -c '%G' /var/lib/chrony 2>/dev/null || echo '_chrony')"
+  # Detectar usuario/grupo de chrony de forma robusta
+  if [[ -d /var/lib/chrony ]]; then
+    CH_USER="$(stat -c '%U' /var/lib/chrony 2>/dev/null || true)"
+    CH_GROUP="$(stat -c '%G' /var/lib/chrony 2>/dev/null || true)"
+  fi
+
+  # Fallback si stat no dio nada útil
+  if [[ -z "${CH_USER:-}" || "${CH_USER}" = "UNKNOWN" ]]; then
+    if id -u chrony >/dev/null 2>&1; then
+      CH_USER="chrony"
+    elif id -u _chrony >/dev/null 2>&1; then
+      CH_USER="_chrony"
+    else
+      CH_USER="root"
+    fi
+  fi
+
+  if [[ -z "${CH_GROUP:-}" || "${CH_GROUP}" = "UNKNOWN" ]]; then
+    if getent group chrony >/dev/null 2>&1; then
+      CH_GROUP="chrony"
+    elif getent group _chrony >/dev/null 2>&1; then
+      CH_GROUP="_chrony"
+    else
+      CH_GROUP="root"
+    fi
+  fi
 
   echo "  -> Usando usuario/grupo de Chrony: ${CH_USER}:${CH_GROUP}"
 
@@ -66,6 +94,9 @@ logdir /var/log/chrony
 confdir /etc/chrony/conf.d
 EOF
 
+  chown root:root "${CHRONY_CONF}"
+  chmod 640 "${CHRONY_CONF}"
+
   echo "  -> Preparando /var/lib/chrony..."
   mkdir -p /var/lib/chrony
   chown "${CH_USER}:${CH_GROUP}" /var/lib/chrony
@@ -81,7 +112,6 @@ EOF
   chown root:root /etc/chrony/conf.d
   chmod 0755 /etc/chrony/conf.d
 
-  CHRONY_KEYS="/etc/chrony/chrony.keys"
   if [[ ! -f "${CHRONY_KEYS}" ]]; then
     echo "  -> Creando fichero de claves ${CHRONY_KEYS}..."
     touch "${CHRONY_KEYS}"
@@ -90,15 +120,26 @@ EOF
   chown "${CH_USER}:root" "${CHRONY_KEYS}"
   chmod 0600 "${CHRONY_KEYS}"
 
+  # Opcional: deshabilitar otros servicios NTP para evitar conflictos
+  if systemctl list-unit-files systemd-timesyncd.service >/dev/null 2>&1; then
+    systemctl disable --now systemd-timesyncd.service >/dev/null 2>&1 || true
+  fi
+  if systemctl list-unit-files ntp.service >/dev/null 2>&1; then
+    systemctl disable --now ntp.service >/dev/null 2>&1 || true
+  fi
+
   echo "  -> Habilitando y reiniciando chrony.service..."
   systemctl enable chrony.service >/dev/null 2>&1 || true
-  systemctl restart chrony.service
+  systemctl restart chrony.service || true
 
   echo "  -> Estado de chrony:"
   systemctl --no-pager --full status chrony.service || true
 
-  echo "  -> Esperando muestras NTS..."
-  sleep 8
-  chronyc tracking || true
-  chronyc sources -v || true
+  # Comandos de verificación solo si chronyc está disponible
+  if command -v chronyc >/dev/null 2>&1; then
+    echo "  -> Esperando muestras NTS..."
+    sleep 8
+    chronyc tracking || true
+    chronyc sources -v || true
+  fi
 }
