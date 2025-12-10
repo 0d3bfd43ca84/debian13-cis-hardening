@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 step_00_packages() {
-  log_step "[1/12] Instalando paquetes necesarios ..."
+  log_step "[00] 00-packages"
 
   DEBIAN_FRONTEND=noninteractive apt-get update -y >/dev/null
   DEBIAN_FRONTEND=noninteractive apt-get install -y \
