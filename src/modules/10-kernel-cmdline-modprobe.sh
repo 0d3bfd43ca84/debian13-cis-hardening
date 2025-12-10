@@ -71,7 +71,6 @@ step_10_kernel_cmdline_and_modprobe() {
   # ------------------------------------------------------------------
   # cis-kernel-hardening.conf (solo ASCII, sin lineas raras)
   # ------------------------------------------------------------------
-  log_info "Creando /etc/modprobe.d/cis-kernel-hardening.conf..."
 
 log_info "Creando /etc/modprobe.d/kernel-hardening.conf..."
 
