@@ -47,7 +47,7 @@ trap 'log_error "Fallo en la línea $LINENO. Revisa la salida anterior."; exit 1
 # Variables globales
 #######################################
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MODULES_DIR="${SCRIPT_DIR}/modules"
+MODULES_DIR="${SCRIPT_DIR}/src/modules"
 
 timestamp="$(date +%Y%m%d-%H%M%S)"
 NON_INTERACTIVE=0
