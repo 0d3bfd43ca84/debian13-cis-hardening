@@ -15,12 +15,13 @@ step_90_services_and_finalize() {
     local svc="$1"
     local desc="$2"
 
-    if ! systemctl list-unit-files "${svc}.service" >/dev/null 2>&1; then
+    # Comprobar que el servicio existe realmente en el sistema
+    if ! systemctl status "${svc}.service" >/dev/null 2>&1; then
       log_info "Servicio ${svc}.service no existe en este sistema"
       return
     fi
 
-    # Si modo interactivo está desactivado, se aplica siempre
+    # Modo non-interactive: aplicar sin preguntar
     if [[ "${NON_INTERACTIVE:-0}" -eq 1 ]]; then
       log_info "Deshabilitando ${svc}.service (${desc}) [modo non-interactive]"
       systemctl disable --now "${svc}.service" >/dev/null 2>&1 || true
@@ -99,6 +100,7 @@ EOF
     read -r -p "¿Reiniciar ahora para aplicar todos los cambios de kernel/grub/sysctl? [y/N]: " reboot_ans
     case "$reboot_ans" in
       [yY]*)
+        log_warn "Reiniciando sistema ahora..."
         reboot
         ;;
       *)
