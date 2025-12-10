@@ -1,69 +1,111 @@
 #!/usr/bin/env bash
 
 step_90_services_and_finalize() {
-  echo
-  echo "[Extra] Opcional: deshabilitar y maskear servicios poco deseables en servidor..."
+  log_step "[90] Deshabilitando servicios innecesarios y finalizando hardening..."
 
-  mask_service() {
+  local SERVICES_TO_MASK=(
+    "cups:Impresión local"
+    "avahi-daemon:MDNS/Zeroconf"
+    "bluetooth:Bluetooth"
+    "rpcbind:RPC legacy"
+    "systemd-resolved:Stub resolver (solo si no se usa)"
+  )
+
+  _mask_service() {
     local svc="$1"
     local desc="$2"
 
-    if systemctl list-unit-files "${svc}.service" >/dev/null 2>&1; then
-      read -r -p "¿Maskear ${svc}.service (${desc})? [y/N]: " ans
-      case "$ans" in
-        [yY]*)
-          systemctl disable --now "${svc}.service" >/dev/null 2>&1 || true
-          systemctl mask "${svc}.service" >/dev/null 2>&1 || true
-          echo "  -> ${svc}.service deshabilitado y maskeado."
-          ;;
-        *)
-          echo "  -> ${svc}.service se mantiene activo."
-          ;;
-      esac
+    if ! systemctl list-unit-files "${svc}.service" >/dev/null 2>&1; then
+      log_info "Servicio ${svc}.service no existe en este sistema"
+      return
     fi
+
+    # Si modo interactivo está desactivado, se aplica siempre
+    if [[ "${NON_INTERACTIVE:-0}" -eq 1 ]]; then
+      log_info "Deshabilitando ${svc}.service (${desc}) [modo non-interactive]"
+      systemctl disable --now "${svc}.service" >/dev/null 2>&1 || true
+      systemctl mask "${svc}.service" >/dev/null 2>&1 || true
+      return
+    fi
+
+    # Modo interactivo
+    read -r -p "¿Maskear ${svc}.service (${desc})? [y/N]: " ans
+    case "$ans" in
+      [yY]*)
+        systemctl disable --now "${svc}.service" >/dev/null 2>&1 || true
+        systemctl mask "${svc}.service" >/dev/null 2>&1 || true
+        log_info "${svc}.service deshabilitado y maskeado"
+        ;;
+      *)
+        log_info "${svc}.service se mantiene activo"
+        ;;
+    esac
   }
 
-  mask_service "cups"             "impresión local"
-  mask_service "avahi-daemon"     "mDNS/zeroconf (descubrimiento en LAN)"
-  mask_service "bluetooth"        "Bluetooth"
-  mask_service "rpcbind"          "RPC legacy (NFS antiguo, etc.)"
-  mask_service "systemd-resolved" "stub DNS local (solo si NO lo usas como resolver)"
+  # Aplicar reglas sobre cada servicio
+  for entry in "${SERVICES_TO_MASK[@]}"; do
+    local svc="${entry%%:*}"
+    local desc="${entry#*:}"
+    _mask_service "$svc" "$desc"
+  done
 
-  echo
-  echo "[Final] Estableciendo multi-user.target como objetivo por defecto (runlevel 3)..."
-  if command -v systemctl >/dev/null 2>&1; then
-    systemctl set-default multi-user.target >/dev/null
+  # Cambiar target por defecto
+  log_step "[Final] Estableciendo multi-user.target como objetivo por defecto"
+  local CURRENT_TARGET
+  CURRENT_TARGET=$(systemctl get-default 2>/dev/null || echo "unknown")
+  log_info "Target actual: ${CURRENT_TARGET}"
+
+  if systemctl set-default multi-user.target >/dev/null 2>&1; then
+    log_info "✓ multi-user.target aplicado"
+  else
+    log_warn "No se pudo aplicar multi-user.target"
   fi
 
-  echo "[Final] Reiniciando/asegurando auditd..."
+  # Reiniciar auditd
+  log_step "Asegurando auditd"
   systemctl enable auditd >/dev/null 2>&1 || true
-  systemctl restart auditd || true
+  systemctl restart auditd >/dev/null 2>&1 || log_warn "No se pudo reiniciar auditd"
 
-  echo
-  echo "==========================================="
-  echo " Hardening base CIS + Lynis aplicado."
-  echo " - Kernel cmdline: AppArmor + audit"
-  echo " - Módulos kernel bloqueados (cis-kernel-hardening.conf)"
-  echo " - sudo: log en /var/log/sudo.log"
-  echo " - pwquality + password aging + umask + hashing rounds"
-  echo " - auditd.conf + reglas CIS en /etc/audit/rules.d/"
-  echo " - Permisos sshd_config, cron*, sudoers.d"
-  echo " - sysctl hardening aplicado (Lynis + extra PCI/ISO-like)"
-  echo " - nftables base aplicado (IPv6 DROP, solo SSH abierto)"
-  echo " - SSH crypto endurecido (Kex/Ciphers/MACs modernos)"
-  echo " - Chrony NTS endurecido"
-  echo " - Default target: multi-user.target"
-  echo " - Servicios opcionales deshabilitados según respuestas"
-  echo "==========================================="
-  echo
+  # Verificación rápida de activación
+  if auditctl -s >/dev/null 2>&1; then
+    log_info "✓ auditd activo y respondiendo"
+  else
+    log_warn "⚠ auditd NO está respondiendo (revisar reglas o conflictos)"
+  fi
 
-  read -r -p "¿Reiniciar ahora para aplicar todos los cambios de kernel/grub/sysctl? [y/N]: " reboot_ans
-  case "$reboot_ans" in
-    [yY]*)
-      reboot
-      ;;
-    *)
-      echo "Reinicio pendiente. Ejecuta 'reboot' manualmente cuando te convenga."
-      ;;
-  esac
+  # Resumen final ordenado
+  log_step "Hardening finalizado — resumen:"
+  cat <<EOF
+  -----------------------------------------------
+   HARDENING APLICADO (Debian 13 CIS + extras)
+  -----------------------------------------------
+   ✔ Kernel cmdline (AppArmor + audit)
+   ✔ Módulos kernel bloqueados
+   ✔ Logging sudo dedicado
+   ✔ Política de contraseñas (pwquality, aging)
+   ✔ auditd.conf + reglas CIS
+   ✔ Permisos críticos (ssh, cron, sudoers)
+   ✔ sysctl hardening (CIS + Lynis + extra)
+   ✔ nftables endurecido (IPv6 DROP opcional)
+   ✔ SSH crypto moderna
+   ✔ Chrony NTS endurecido
+   ✔ Default target: multi-user.target
+   ✔ Servicios opcionales deshabilitados
+  -----------------------------------------------
+EOF
+
+  # Preguntar reboot solo si interactivo
+  if [[ "${NON_INTERACTIVE:-0}" -ne 1 ]]; then
+    read -r -p "¿Reiniciar ahora para aplicar todos los cambios de kernel/grub/sysctl? [y/N]: " reboot_ans
+    case "$reboot_ans" in
+      [yY]*)
+        reboot
+        ;;
+      *)
+        log_info "Reinicio pendiente. Ejecuta 'reboot' cuando te convenga."
+        ;;
+    esac
+  else
+    log_info "Reinicio no realizado (modo non-interactive)."
+  fi
 }
