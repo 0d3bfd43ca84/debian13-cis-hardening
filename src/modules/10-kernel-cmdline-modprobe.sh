@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 step_10_kernel_cmdline_and_modprobe() {
-  log_step "[10] Configurando kernel cmdline y modprobe (CIS)"
+  log_step "[10] Configurando kernel cmdline y módulos"
 
   local GRUB_DEFAULT_FILE="/etc/default/grub"
 
@@ -14,12 +14,12 @@ step_10_kernel_cmdline_and_modprobe() {
   cp "$GRUB_DEFAULT_FILE" "${GRUB_DEFAULT_FILE}.bak.${timestamp}"
   log_info "Backup de ${GRUB_DEFAULT_FILE} en ${GRUB_DEFAULT_FILE}.bak.${timestamp}"
 
-  # Obtener valor actual de cmdline sin hacer source (mas seguro)
+  # Obtener valor actual de cmdline sin hacer source (más seguro)
   local CURRENT_CMDLINE
   CURRENT_CMDLINE=$(grep -E '^GRUB_CMDLINE_LINUX=' "$GRUB_DEFAULT_FILE" | cut -d'"' -f2)
   local NEW_CMDLINE="$CURRENT_CMDLINE"
 
-  # Parametros minimos necesarios
+  # Parámetros mínimos necesarios
   local REQUIRED_PARAMS=(
     "apparmor=1"
     "security=apparmor"
@@ -31,10 +31,8 @@ step_10_kernel_cmdline_and_modprobe() {
   for p in "${REQUIRED_PARAMS[@]}"; do
     name="${p%%=*}"
 
-    # Eliminar valor previo (name=algo)
+    # Eliminar valor previo (name=algo) o flag sin valor
     NEW_CMDLINE="$(echo " ${NEW_CMDLINE} " | sed -E "s/ ${name}=[^ ]*//g")"
-
-    # Eliminar flag simple sin valor (name)
     NEW_CMDLINE="$(echo " ${NEW_CMDLINE} " | sed -E "s/ ${name}( |$)//g")"
 
     # Añadir el valor correcto
@@ -43,7 +41,7 @@ step_10_kernel_cmdline_and_modprobe() {
 
   NEW_CMDLINE="$(echo "$NEW_CMDLINE" | xargs || true)"
 
-  # Escribir nueva linea GRUB_CMDLINE_LINUX
+  # Escribir nueva línea GRUB_CMDLINE_LINUX
   if grep -qE '^GRUB_CMDLINE_LINUX=' "$GRUB_DEFAULT_FILE"; then
     sed -i "s|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\"${NEW_CMDLINE}\"|" "$GRUB_DEFAULT_FILE"
   else
@@ -52,7 +50,7 @@ step_10_kernel_cmdline_and_modprobe() {
 
   log_info "GRUB_CMDLINE_LINUX=\"${NEW_CMDLINE}\""
 
-  log_info "Actualizando configuracion de GRUB..."
+  log_info "Actualizando configuración de GRUB..."
   if command -v update-grub >/dev/null 2>&1; then
     update-grub >/dev/null
   elif command -v grub-mkconfig >/dev/null 2>&1; then
@@ -61,23 +59,20 @@ step_10_kernel_cmdline_and_modprobe() {
     log_warn "Ni update-grub ni grub-mkconfig disponibles; revisa GRUB manualmente."
   fi
 
-  # Permisos CIS para grub.cfg
+  # Permisos de /boot/grub/grub.cfg
   if [[ -f /boot/grub/grub.cfg ]]; then
     log_info "Ajustando permisos de /boot/grub/grub.cfg"
     chown root:root /boot/grub/grub.cfg
     chmod 600 /boot/grub/grub.cfg
   fi
 
-  # ------------------------------------------------------------------
-  # cis-kernel-hardening.conf (solo ASCII, sin lineas raras)
-  # ------------------------------------------------------------------
+  # --- Kernel hardening: módulos a bloquear ---
 
-log_info "Creando /etc/modprobe.d/kernel-hardening.conf..."
+  log_info "Creando /etc/modprobe.d/kernel-hardening.conf..."
 
-cat >/etc/modprobe.d/kernel-hardening.conf <<'EOF'
+  cat >/etc/modprobe.d/kernel-hardening.conf <<'EOF'
 ############################################################
 # Kernel Hardening — Disable Unused Filesystems & Protocols
-# Limpio · Minimalista · Producción
 ############################################################
 
 ########## Filesystems no utilizados ##########
@@ -97,11 +92,11 @@ install hfsplus /bin/true
 blacklist jffs2
 install jffs2 /bin/true
 
-# overlay: activar si usas contenedores
+# overlay: activar si usas contenedores (Docker/Podman, etc.)
 blacklist overlay
 install overlay /bin/true
 
-# squashfs: activar si usas snaps
+# squashfs: activar si usas snaps u otras imágenes squashfs
 blacklist squashfs
 install squashfs /bin/true
 
@@ -128,8 +123,8 @@ blacklist sctp
 install sctp /bin/true
 EOF
 
-chown root:root /etc/modprobe.d/cis-kernel-hardening.conf
-chmod 600 /etc/modprobe.d/cis-kernel-hardening.conf
+  chown root:root /etc/modprobe.d/kernel-hardening.conf
+  chmod 600 /etc/modprobe.d/kernel-hardening.conf
 
   log_info "Actualizando initramfs..."
   if command -v update-initramfs >/dev/null 2>&1; then
