@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
 
 step_60_nftables() {
-  log_step "[9/12] Configurando nftables (firewall base + conntrack + IPv6 DROP)..."
+  log_step "[60] Configurando nftables (firewall base + conntrack + IPv6 DROP)..."
 
-  cat >/etc/nftables.conf <<'EOF'
+  local NFT_CONF="/etc/nftables.conf"
+
+  # Backup de configuración previa, si existe
+  if [[ -f "$NFT_CONF" ]]; then
+    cp "$NFT_CONF" "${NFT_CONF}.bak.${timestamp}"
+    echo "  -> Backup de ${NFT_CONF} en ${NFT_CONF}.bak.${timestamp}"
+  fi
+
+  cat >"$NFT_CONF" <<'EOF'
 flush ruleset
 
 table inet firewall {
@@ -70,9 +78,23 @@ table inet firewall {
 }
 EOF
 
-  systemctl enable nftables.service >/dev/null 2>&1 || true
-  systemctl restart nftables.service
+  # Validar configuración antes de aplicarla
+  echo "  -> Validando configuración de nftables..."
+  if ! nft -c -f "$NFT_CONF" >/dev/null 2>&1; then
+    echo "ERROR: La configuración de ${NFT_CONF} no es válida. Restaurando backup..." >&2
+    if [[ -f "${NFT_CONF}.bak.${timestamp}" ]]; then
+      mv "${NFT_CONF}.bak.${timestamp}" "$NFT_CONF"
+      echo "  -> ${NFT_CONF} restaurado desde backup."
+    fi
+    return 1
+  fi
 
-  echo "  -> nftables activo:"
+  systemctl enable nftables.service >/dev/null 2>&1 || true
+
+  if ! systemctl restart nftables.service >/dev/null 2>&1; then
+    echo "WARN: No se pudo reiniciar nftables.service; revisa 'journalctl -u nftables'." >&2
+  fi
+
+  echo "  -> nftables activo (ruleset actual):"
   nft list ruleset || true
 }
