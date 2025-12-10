@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
+#
+# modules/30-auditd.sh
+# Configuración de auditd: auditd.conf + reglas CIS 4.1.x
 
 step_30_auditd() {
   log_step "[30] Configurando auditd (auditd.conf + reglas CIS 4.1.x)..."
 
   local AUDIT_CONF="/etc/audit/auditd.conf"
   local RULES_DIR="/etc/audit/rules.d"
+  local UID_MIN LEGACY_RULES
 
   ############################################################
   # 1) auditd.conf
@@ -32,7 +36,13 @@ step_30_auditd() {
   log_info "Creando reglas en ${RULES_DIR}..."
   mkdir -p "$RULES_DIR"
 
-  local UID_MIN
+  # Aparcar reglas legacy si existen
+  LEGACY_RULES="${RULES_DIR}/audit.rules"
+  if [[ -f "$LEGACY_RULES" ]]; then
+    mv "$LEGACY_RULES" "${LEGACY_RULES}.dist.${timestamp}"
+    log_info "Reglas legacy movidas a ${LEGACY_RULES}.dist.${timestamp}"
+  fi
+
   UID_MIN=$(awk '/^UID_MIN/ {print $2}' /etc/login.defs 2>/dev/null || echo 1000)
 
   # 50-scope.rules
