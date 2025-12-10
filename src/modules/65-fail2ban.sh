@@ -1,19 +1,26 @@
 #!/usr/bin/env bash
 
 step_65_fail2ban() {
-  log_step "[9b/12] Configurando Fail2Ban + nftables (protección SSH)..."
+  log_step "[65] Configurando Fail2Ban + nftables (protección SSH)..."
 
   local NFT_MAIN_CONF="/etc/nftables.conf"
   local NFT_F2B_CONF="/etc/nftables-f2b.conf"
+  local F2B_ACTION_DIR="/etc/fail2ban/action.d"
+  local F2B_ACTION_FILE="${F2B_ACTION_DIR}/nftables-f2b.local"
+  local F2B_JAIL_LOCAL="/etc/fail2ban/jail.local"
 
-  # Backup nftables.conf
-  if [[ -f "${NFT_MAIN_CONF}" ]]; then
+  # ------------------------------------------------------------------
+  # 1) Integración nftables: tabla inet f2b + include
+  # ------------------------------------------------------------------
+  if [[ ! -f "$NFT_MAIN_CONF" ]]; then
+    echo "WARN: $NFT_MAIN_CONF no existe; ejecuta primero el módulo 60-nftables." >&2
+  else
+    # Backup de nftables.conf
     cp "${NFT_MAIN_CONF}" "${NFT_MAIN_CONF}.bak.${timestamp}"
     echo "  -> Backup de ${NFT_MAIN_CONF} -> ${NFT_MAIN_CONF}.bak.${timestamp}"
-  fi
 
-  # Tabla inet f2b con sets de blacklist
-  cat > "${NFT_F2B_CONF}" << 'EOF'
+    # Tabla inet f2b con sets de blacklist
+    cat > "${NFT_F2B_CONF}" << 'EOF'
 table inet f2b {
     # IPs baneadas por Fail2Ban (IPv4)
     set blacklist_v4 {
@@ -37,26 +44,41 @@ table inet f2b {
 }
 EOF
 
-  # Asegurar include en nftables.conf (una sola vez)
-  if ! grep -q 'nftables-f2b.conf' "${NFT_MAIN_CONF}"; then
-    {
-      echo ''
-      echo '# Fail2Ban blacklist (SSH, etc.)'
-      echo 'include "/etc/nftables-f2b.conf"'
-    } >> "${NFT_MAIN_CONF}"
+    chown root:root "$NFT_F2B_CONF"
+    chmod 600 "$NFT_F2B_CONF"
+
+    # Asegurar include en nftables.conf (una sola vez)
+    if ! grep -q 'nftables-f2b.conf' "${NFT_MAIN_CONF}"; then
+      {
+        echo ''
+        echo '# Fail2Ban blacklist (SSH, etc.)'
+        echo 'include "/etc/nftables-f2b.conf"'
+      } >> "${NFT_MAIN_CONF}"
+    fi
+
+    echo "  -> Validando configuración de nftables (con inet f2b)..."
+    if ! nft -c -f "${NFT_MAIN_CONF}" >/dev/null 2>&1; then
+      echo "ERROR: Configuración de nftables inválida tras añadir inet f2b. Restaurando backup..." >&2
+      mv "${NFT_MAIN_CONF}.bak.${timestamp}" "${NFT_MAIN_CONF}"
+      rm -f "${NFT_F2B_CONF}"
+      return 1
+    fi
+
+    echo "  -> Recargando nftables con la nueva tabla inet f2b..."
+    if ! nft -f "${NFT_MAIN_CONF}" >/dev/null 2>&1; then
+      echo "WARN: No se pudo recargar nftables; revisa 'journalctl -u nftables'." >&2
+    fi
+
+    echo "  -> Estado de la tabla inet f2b:"
+    nft list table inet f2b || echo "  [!] No se pudo listar inet f2b (revisa errores de nft)."
   fi
 
-  echo "  -> Recargando nftables con la nueva tabla inet f2b..."
-  nft -f "${NFT_MAIN_CONF}"
-
-  echo "  -> Estado de la tabla inet f2b:"
-  nft list table inet f2b || echo "  [!] No se pudo listar inet f2b (revisa errores de nft)."
-
-  # -------- Fail2Ban: acción personalizada nftables-f2b --------
-  local F2B_ACTION_DIR="/etc/fail2ban/action.d"
-  local F2B_ACTION_FILE="${F2B_ACTION_DIR}/nftables-f2b.local"
-
+  # ------------------------------------------------------------------
+  # 2) Fail2Ban: acción personalizada nftables-f2b
+  # ------------------------------------------------------------------
   mkdir -p "${F2B_ACTION_DIR}"
+  chown root:root "${F2B_ACTION_DIR}"
+  chmod 750 "${F2B_ACTION_DIR}"
 
   if [[ -f "${F2B_ACTION_FILE}" ]]; then
     cp "${F2B_ACTION_FILE}" "${F2B_ACTION_FILE}.bak.${timestamp}"
@@ -96,8 +118,15 @@ actionunban = nft 'delete element inet f2b blacklist_v4 { <ip> }' 2>/dev/null ||
 name = default
 EOF
 
-  # -------- Fail2Ban: jail.local endurecido para SSH --------
-  local F2B_JAIL_LOCAL="/etc/fail2ban/jail.local"
+  chown root:root "${F2B_ACTION_FILE}"
+  chmod 640 "${F2B_ACTION_FILE}"
+
+  # ------------------------------------------------------------------
+  # 3) Fail2Ban: jail.local endurecido para SSH
+  # ------------------------------------------------------------------
+  mkdir -p /etc/fail2ban
+  chown root:root /etc/fail2ban
+  chmod 755 /etc/fail2ban
 
   if [[ -f "${F2B_JAIL_LOCAL}" ]]; then
     cp "${F2B_JAIL_LOCAL}" "${F2B_JAIL_LOCAL}.bak.${timestamp}"
@@ -114,12 +143,12 @@ backend   = systemd
 banaction = nftables-f2b
 
 # Parámetros genéricos de hardening
-bantime  = 3600       ; 1 hora
-findtime = 600        ; ventana de 10 minutos
-maxretry = 5
+bantime   = 3600       ; 1 hora
+findtime  = 600        ; ventana de 10 minutos
+maxretry  = 5
 destemail = root@localhost
-sender   = fail2ban@localhost
-mta      = sendmail
+sender    = fail2ban@localhost
+mta       = sendmail
 
 ignoreself = true
 ignoreip   = 127.0.0.1/8 ::1
@@ -133,12 +162,37 @@ logpath  = auto
 maxretry = 5
 EOF
 
+  chown root:root "${F2B_JAIL_LOCAL}"
+  chmod 640 "${F2B_JAIL_LOCAL}"
+
+  # ------------------------------------------------------------------
+  # 4) Validar y arrancar Fail2Ban
+  # ------------------------------------------------------------------
+  if ! command -v fail2ban-client >/dev/null 2>&1; then
+    echo "WARN: fail2ban-client no está disponible; ¿está instalado Fail2Ban?" >&2
+    return 1
+  fi
+
   echo "  -> Probando configuración de Fail2Ban..."
-  fail2ban-client -t
+  if ! fail2ban-client -t; then
+    echo "ERROR: Configuración de Fail2Ban inválida. Restaurando backups..." >&2
+
+    if [[ -f "${F2B_ACTION_FILE}.bak.${timestamp}" ]]; then
+      mv "${F2B_ACTION_FILE}.bak.${timestamp}" "${F2B_ACTION_FILE}"
+      echo "  -> Restaurado ${F2B_ACTION_FILE} desde backup."
+    fi
+
+    if [[ -f "${F2B_JAIL_LOCAL}.bak.${timestamp}" ]]; then
+      mv "${F2B_JAIL_LOCAL}.bak.${timestamp}" "${F2B_JAIL_LOCAL}"
+      echo "  -> Restaurado ${F2B_JAIL_LOCAL} desde backup."
+    fi
+
+    return 1
+  fi
 
   echo "  -> Habilitando y reiniciando Fail2Ban..."
   systemctl enable fail2ban >/dev/null 2>&1 || true
-  systemctl restart fail2ban
+  systemctl restart fail2ban || true
 
   sleep 2
 
